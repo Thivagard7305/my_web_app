@@ -2,7 +2,10 @@ pipeline {
   agent any
 
   environment {
-    APP_DIR = "my-web-app"
+    APP_DIR = "my_web_app"
+    AZURE_RESOURCE_GROUP = "my-web-app-rg"
+    AZURE_WEBAPP_NAME = "my-python-app"
+    AZURE_CREDENTIALS_ID = "azure-sp-credential"
   }
 
   stages {
@@ -14,23 +17,29 @@ pipeline {
 
     stage('Install Dependencies') {
       steps {
-        sh 'pip3 install -r requirements.txt'
+        sh "cd ${APP_DIR} && pip3 install -r requirements.txt"
       }
     }
 
     stage('Run Tests') {
       steps {
-        sh 'pytest test_app.py'
+        sh "cd ${APP_DIR} && pytest test_app.py"
       }
     }
 
-    stage('Deploy to GCP') {
+    stage('Package Application') {
       steps {
-        withCredentials([sshUserPrivateKey(credentialsId: 'gcp-ssh-key', keyFileVariable: 'SSH_KEY')]) {
-          sh '''
-            chmod +x deploy.sh
-            ./deploy.sh
-          '''
+        sh "cd ${APP_DIR} && zip -r ../${APP_DIR}.zip ."
+      }
+    }
+
+    stage('Deploy to Azure') {
+      steps {
+        script {
+          azureWebAppPublish azureCredentialsId: "${AZURE_CREDENTIALS_ID}",
+                             resourceGroup: "${AZURE_RESOURCE_GROUP}",
+                             appName: "${AZURE_WEBAPP_NAME}",
+                             filePath: "${APP_DIR}.zip"
         }
       }
     }
@@ -41,7 +50,7 @@ pipeline {
       echo "Build failed!"
     }
     success {
-      echo "Successfully deployed!"
+      echo "Successfully deployed to Azure!"
     }
   }
 }
